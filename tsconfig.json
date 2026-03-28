@@ -1,29 +1,35 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "ES2020",
+    "useDefineForClassFields": true,
     "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
     ],
-    "jsx": "preserve",
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "allowJs": true,
+    "module": "ESNext",
     "skipLibCheck": true,
-    "strict": false,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "incremental": true,
+    "noEmit": true,
+    "jsx": "preserve",
+    /* Linting */
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*"
       ]
     },
-    "baseUrl": ".",
+    "allowJs": true,
+    "incremental": true,
+    "esModuleInterop": true,
     "plugins": [
       {
         "name": "next"
@@ -31,9 +37,10 @@
     ]
   },
   "include": [
-    "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    "**/*.js",
+    "**/*.jsx",
     ".next/types/**/*.ts"
   ],
   "exclude": [

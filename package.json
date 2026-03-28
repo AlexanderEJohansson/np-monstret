@@ -11,18 +11,27 @@
   "dependencies": {
     "@stripe/stripe-js": "^3",
     "@supabase/supabase-js": "^2",
+    "@tailwindcss/typography": "^0.5.13",
+    "@types/canvas-confetti": "^1.9.0",
+    "canvas-confetti": "^1.9.4",
+    "clsx": "^2.1.1",
+    "framer-motion": "^10.16.4",
+    "lucide-react": "^0.331.0",
     "next": "^14",
     "react": "^18",
     "react-dom": "^18",
-    "recharts": "^2",
+    "recharts": "^2.10.3",
     "stripe": "^13"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "18.3.28",
     "@types/react-dom": "^18",
+    "autoprefixer": "^10",
     "eslint": "^8",
     "eslint-config-next": "^14",
+    "postcss": "^8",
+    "tailwindcss": "^3",
     "typescript": "5.9.3"
   }
 }
