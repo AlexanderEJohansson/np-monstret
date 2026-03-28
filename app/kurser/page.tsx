@@ -9,18 +9,18 @@ import { createClient } from '../../lib/supabase'
 import LoadingSkeleton from '../../components/LoadingSkeleton'
 
 const ALL_COURSES = [
-  { id: 1, name: 'Matematik Åk 6', subject: '📐', grade: 'Åk 6', progress: 0 },
-  { id: 2, name: 'Engelska Åk 6', subject: '🇬🇧', grade: 'Åk 6', progress: 0 },
-  { id: 3, name: 'Svenska Åk 6', subject: '📝', grade: 'Åk 6', progress: 0 },
-  { id: 4, name: 'Historia Åk 6', subject: '🏛️', grade: 'Åk 6', progress: 0 },
-  { id: 5, name: 'Matematik Åk 9', subject: '📐', grade: 'Åk 9', progress: 0 },
-  { id: 6, name: 'Engelska Åk 9', subject: '🇬🇧', grade: 'Åk 9', progress: 0 },
-  { id: 7, name: 'Svenska Åk 9', subject: '📝', grade: 'Åk 9', progress: 0 },
-  { id: 8, name: 'Naturkunskap Åk 9', subject: '🔬', grade: 'Åk 9', progress: 0 },
-  { id: 9, name: 'Matematik Gym', subject: '📐', grade: 'Gymnasiet', progress: 0 },
-  { id: 10, name: 'Engelska Gym', subject: '🇬🇧', grade: 'Gymnasiet', progress: 0 },
-  { id: 11, name: 'Svenska Gym', subject: '📝', grade: 'Gymnasiet', progress: 0 },
-  { id: 12, name: 'Samhällskunskap Gym', subject: '🌍', grade: 'Gymnasiet', progress: 0 },
+  { id: 1, name: 'Matematik Åk 6', subject: 'Matematik', emoji: '📐', grade: 'Åk 6', color: 'subject-math' },
+  { id: 2, name: 'Engelska Åk 6', subject: 'Engelska', emoji: '🇬🇧', grade: 'Åk 6', color: 'subject-english' },
+  { id: 3, name: 'Svenska Åk 6', subject: 'Svenska', emoji: '📝', grade: 'Åk 6', color: 'subject-swedish' },
+  { id: 4, name: 'Historia Åk 6', subject: 'Historia', emoji: '🏛️', grade: 'Åk 6', color: 'subject-math' },
+  { id: 5, name: 'Matematik Åk 9', subject: 'Matematik', emoji: '📐', grade: 'Åk 9', color: 'subject-math' },
+  { id: 6, name: 'Engelska Åk 9', subject: 'Engelska', emoji: '🇬🇧', grade: 'Åk 9', color: 'subject-english' },
+  { id: 7, name: 'Svenska Åk 9', subject: 'Svenska', emoji: '📝', grade: 'Åk 9', color: 'subject-swedish' },
+  { id: 8, name: 'Naturkunskap Åk 9', subject: 'Naturkunskap', emoji: '🔬', grade: 'Åk 9', color: 'subject-math' },
+  { id: 9, name: 'Matematik Gym', subject: 'Matematik', emoji: '📐', grade: 'Gymnasiet', color: 'subject-math' },
+  { id: 10, name: 'Engelska Gym', subject: 'Engelska', emoji: '🇬🇧', grade: 'Gymnasiet', color: 'subject-english' },
+  { id: 11, name: 'Svenska Gym', subject: 'Svenska', emoji: '📝', grade: 'Gymnasiet', color: 'subject-swedish' },
+  { id: 12, name: 'Samhällskunskap Gym', subject: 'Samhällskunskap', emoji: '🌍', grade: 'Gymnasiet', color: 'subject-swedish' },
 ]
 
 export default function CoursesPage() {
@@ -98,57 +98,76 @@ export default function CoursesPage() {
           {isLoading ? (
             <LoadingSkeleton variant="card" count={12} />
           ) : (
-            filteredCourses.map((course, idx) => (
-              <motion.div
-                key={course.id}
-                className="glass-lg p-6 rounded-xl cursor-pointer group relative overflow-hidden"
-                whileHover={{ y: -4 }}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: (idx % 3) * 0.1 }}
-                onClick={() => handleCourseClick(course.id)}
-              >
-                {/* Overlay for non-logged-in users */}
-                {!user && (
-                  <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center rounded-xl z-10">
-                    <div className="text-center">
-                      <Lock size={32} className="mx-auto mb-2 text-neon" />
-                      <p className="text-white font-semibold text-sm">Logga in för att starta</p>
+            filteredCourses.map((course, idx) => {
+              const getColorClass = () => {
+                switch (course.color) {
+                  case 'subject-math':
+                    return 'from-subject-math/10 to-subject-math/5 border-subject-math/20'
+                  case 'subject-english':
+                    return 'from-subject-english/10 to-subject-english/5 border-subject-english/20'
+                  case 'subject-swedish':
+                    return 'from-subject-swedish/10 to-subject-swedish/5 border-subject-swedish/20'
+                  default:
+                    return 'from-neon/10 to-neon/5 border-neon/20'
+                }
+              }
+
+              const getAccentColor = () => {
+                switch (course.color) {
+                  case 'subject-math':
+                    return 'text-subject-math'
+                  case 'subject-english':
+                    return 'text-subject-english'
+                  case 'subject-swedish':
+                    return 'text-subject-swedish'
+                  default:
+                    return 'text-neon'
+                }
+              }
+
+              return (
+                <motion.div
+                  key={course.id}
+                  className={`glass-lg p-6 rounded-xl cursor-pointer group relative overflow-hidden bg-gradient-to-br ${getColorClass()} border-2`}
+                  whileHover={{ y: -4 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: (idx % 3) * 0.1 }}
+                  onClick={() => handleCourseClick(course.id)}
+                >
+                  {/* Overlay for non-logged-in users */}
+                  {!user && (
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center rounded-xl z-10">
+                      <div className="text-center">
+                        <Lock size={32} className="mx-auto mb-2 text-neon" />
+                        <p className="text-white font-semibold text-sm">Logga in för att starta</p>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                <div className="space-y-4">
-                  {/* Subject Icon */}
-                  <div className="text-5xl">{course.subject}</div>
-
-                  {/* Course Name */}
-                  <div>
-                    <h3 className="font-bold text-text-primary text-lg">{course.name}</h3>
-                    <p className="text-xs text-text-tertiary">{course.grade}</p>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-xs text-text-tertiary">
-                      <span>Framsteg</span>
-                      <span>{course.progress}%</span>
+                  <div className="space-y-4">
+                    {/* Subject Badge */}
+                    <div className="flex items-center space-x-2">
+                      <span className="text-3xl">{course.emoji}</span>
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${getAccentColor()} bg-${course.color}/10`}>
+                        {course.subject}
+                      </span>
                     </div>
-                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-neon to-accent transition-all"
-                        style={{ width: `${course.progress}%` }}
-                      ></div>
-                    </div>
-                  </div>
 
-                  {/* CTA */}
-                  <button className="w-full mt-4 px-4 py-2 bg-gradient-to-r from-neon to-accent rounded-lg text-primary font-semibold text-sm hover:shadow-glow-lg transition-all transform group-hover:scale-105">
-                    Starta quiz
-                  </button>
-                </div>
-              </motion.div>
-            ))
+                    {/* Course Name */}
+                    <div>
+                      <h3 className="font-bold text-text-primary text-lg">{course.name}</h3>
+                      <p className="text-xs text-text-tertiary">{course.grade}</p>
+                    </div>
+
+                    {/* CTA */}
+                    <button className={`w-full mt-4 px-4 py-2 bg-gradient-to-r from-${course.color} to-accent rounded-lg text-primary font-semibold text-sm hover:shadow-accent-glow transition-all transform group-hover:scale-105`}>
+                      Starta quiz →
+                    </button>
+                  </div>
+                </motion.div>
+              )
+            })
           )}
         </div>
 

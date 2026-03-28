@@ -5,44 +5,120 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
-import { Flame, Trophy, Target, TrendingUp } from 'lucide-react'
+import { Flame, Trophy, Target, TrendingUp, Zap } from 'lucide-react'
 import { createClient } from '../../lib/supabase'
 import LoadingSkeleton from '../../components/LoadingSkeleton'
 
-// Fake data for demo
-const DEMO_SCORES = [
-  { name: 'Dag 1', score: 65 },
-  { name: 'Dag 2', score: 72 },
-  { name: 'Dag 3', score: 68 },
-  { name: 'Dag 4', score: 78 },
-  { name: 'Dag 5', score: 82 },
-  { name: 'Dag 6', score: 85 },
-  { name: 'Dag 7', score: 88 },
-]
+interface UserProgress {
+  total_quizzes: number
+  avg_score: number
+  total_xp: number
+  level: number
+  streak: number
+  weaknesses: string[]
+}
 
-const DEMO_RECENT_QUIZZES = [
-  { id: 1, course: 'Matematik Åk 9', score: 88, date: '2024-03-28', percentage: 88 },
-  { id: 2, course: 'Engelska Åk 9', score: 82, date: '2024-03-27', percentage: 82 },
-  { id: 3, course: 'Svenska Åk 9', score: 85, date: '2024-03-26', percentage: 85 },
-]
+interface RecentQuiz {
+  id: string
+  course_name: string
+  score: number
+  created_at: string
+}
+
+const LEVEL_NAMES = {
+  1: 'Nybörjare',
+  2: 'Lansen',
+  3: 'Riddaren',
+  4: 'Mästare',
+  5: 'NP-Monster',
+}
+
+const getLevel = (xp: number) => {
+  if (xp < 100) return 1
+  if (xp < 300) return 2
+  if (xp < 600) return 3
+  if (xp < 1000) return 4
+  return 5
+}
+
+const getXpForLevel = (level: number) => {
+  const thresholds = [0, 100, 300, 600, 1000]
+  return thresholds[level - 1] || 0
+}
+
+const getXpToNextLevel = (xp: number) => {
+  const thresholds = [100, 300, 600, 1000, Infinity]
+  const currentLevel = getLevel(xp)
+  return thresholds[currentLevel - 1]
+}
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
+  const [progress, setProgress] = useState<UserProgress | null>(null)
+  const [recentQuizzes, setRecentQuizzes] = useState<RecentQuiz[]>([])
+  const [scoreHistory, setScoreHistory] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/auth/login')
-      } else {
-        setUser(user)
+    const loadDashboard = async () => {
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser) {
+          router.push('/auth/login')
+          return
+        }
+        setUser(authUser)
+
+        // Hämta user_progress
+        const { data: progressData } = await supabase
+          .from('user_progress')
+          .select('*')
+          .eq('user_id', authUser.id)
+          .single()
+
+        if (progressData) {
+          setProgress(progressData)
+        } else {
+          // Om ingen progress finns, skapa den
+          await fetch('/api/auth/profile', { method: 'POST' })
+          // Försök hämta igen
+          const { data: newProgressData } = await supabase
+            .from('user_progress')
+            .select('*')
+            .eq('user_id', authUser.id)
+            .single()
+          if (newProgressData) setProgress(newProgressData)
+        }
+
+        // Hämta senaste quiz-resultat
+        const { data: quizzes } = await supabase
+          .from('quizzes')
+          .select('id, course_name, score, created_at')
+          .eq('user_id', authUser.id)
+          .order('created_at', { ascending: false })
+          .limit(5)
+
+        if (quizzes) {
+          setRecentQuizzes(quizzes)
+          // Skapa score history för chart
+          const history = quizzes
+            .reverse()
+            .map((q, i) => ({
+              name: `Quiz ${i + 1}`,
+              score: q.score || 0,
+            }))
+          setScoreHistory(history)
+        }
+      } catch (error) {
+        console.error('Error loading dashboard:', error)
+      } finally {
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }
-    checkAuth()
+
+    loadDashboard()
   }, [])
 
   if (isLoading) {
@@ -57,6 +133,11 @@ export default function DashboardPage() {
   }
 
   const userName = user?.email?.split('@')[0] || 'Student'
+  const currentLevel = progress ? getLevel(progress.total_xp) : 1
+  const levelName = LEVEL_NAMES[currentLevel as keyof typeof LEVEL_NAMES]
+  const xpInCurrentLevel = progress?.total_xp || 0 - getXpForLevel(currentLevel)
+  const xpToNextLevel = getXpToNextLevel(progress?.total_xp || 0) - getXpForLevel(currentLevel)
+  const xpProgress = ((xpInCurrentLevel) / xpToNextLevel) * 100
 
   return (
     <div className="min-h-screen py-12 px-4 bg-gradient-to-b from-primary to-secondary/10">
@@ -68,140 +149,217 @@ export default function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <h1 className="text-5xl md:text-6xl font-black mb-2 gradient-text-static">Hej, {userName}! 👋</h1>
+          <h1 className="text-5xl md:text-6xl font-black mb-2 bg-gradient-to-r from-neon to-accent bg-clip-text text-transparent">
+            Hej, {userName}! 👋
+          </h1>
           <p className="text-text-secondary text-lg">Så går det i din träning</p>
         </motion.div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          {[
-            { icon: Trophy, label: 'Quiz genomförda', value: '12', color: 'from-yellow-500 to-yellow-600' },
-            { icon: TrendingUp, label: 'Ditt snitt', value: '82%', color: 'from-green-500 to-emerald-600' },
-            { icon: Flame, label: 'Streak', value: '7 dagar', color: 'from-red-500 to-orange-600' },
-            { icon: Target, label: 'Nivå', value: 'Expert', color: 'from-purple-500 to-violet-600' },
-          ].map((stat, idx) => {
-            const Icon = stat.icon
-            return (
+          {/* Level Card */}
+          <motion.div
+            className="glass-lg p-6 rounded-xl bg-gradient-to-br from-neon/10 to-accent/10 border border-neon/20"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0 }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-text-tertiary text-sm mb-1">Din nivå</p>
+                <p className="text-2xl font-black bg-gradient-to-r from-neon to-accent bg-clip-text text-transparent">
+                  {levelName}
+                </p>
+                <p className="text-xs text-text-tertiary mt-1">Level {currentLevel}</p>
+              </div>
+              <Zap className="w-12 h-12 text-neon opacity-30" />
+            </div>
+          </motion.div>
+
+          {/* XP Card */}
+          <motion.div
+            className="glass-lg p-6 rounded-xl bg-gradient-to-br from-neon/10 to-secondary/10 border border-neon/20"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-text-tertiary text-sm mb-1">Total XP</p>
+                <p className="text-3xl font-black text-neon">{progress?.total_xp || 0}</p>
+                <p className="text-xs text-text-tertiary mt-1">{Math.round(xpProgress)}% till nästa level</p>
+              </div>
+              <Trophy className="w-12 h-12 text-neon opacity-30" />
+            </div>
+            {/* XP Progress Bar */}
+            <div className="mt-3 h-2 bg-secondary rounded-full overflow-hidden">
               <motion.div
-                key={idx}
-                className={`glass-lg p-6 rounded-xl bg-gradient-to-br ${stat.color}/10 border border-${stat.color.split('-')[1]}/20`}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
+                className="h-full bg-gradient-to-r from-neon to-accent"
+                initial={{ width: '0%' }}
+                animate={{ width: `${Math.min(xpProgress, 100)}%` }}
+                transition={{ duration: 1, delay: 0.5 }}
+              />
+            </div>
+          </motion.div>
+
+          {/* Quiz Stats */}
+          <motion.div
+            className="glass-lg p-6 rounded-xl bg-gradient-to-br from-accent/10 to-neon/10 border border-accent/20"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-text-tertiary text-sm mb-1">Quiz genomförda</p>
+                <p className="text-3xl font-black text-accent">{progress?.total_quizzes || 0}</p>
+                <p className="text-xs text-text-tertiary mt-1">Snitt: {progress?.avg_score || 0}%</p>
+              </div>
+              <TrendingUp className="w-12 h-12 text-accent opacity-30" />
+            </div>
+          </motion.div>
+
+          {/* Streak Card */}
+          <motion.div
+            className="glass-lg p-6 rounded-xl bg-gradient-to-br from-warning/10 to-accent/10 border border-warning/20"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-text-tertiary text-sm mb-1">Din streak</p>
+                <p className="text-3xl font-black text-warning">{progress?.streak || 0}</p>
+                <p className="text-xs text-text-tertiary mt-1">dagars streck</p>
+              </div>
+              <motion.div
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-text-tertiary text-sm mb-1">{stat.label}</p>
-                    <p className="text-3xl font-black text-text-primary">{stat.value}</p>
-                  </div>
-                  <Icon className={`w-12 h-12 text-neon opacity-30`} />
-                </div>
+                <Flame className="w-12 h-12 text-warning opacity-30" />
               </motion.div>
-            )
-          })}
+            </div>
+          </motion.div>
         </div>
+
+        {/* Weakness Tags */}
+        {progress?.weaknesses && progress.weaknesses.length > 0 && (
+          <motion.div
+            className="mb-12"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+          >
+            <h3 className="text-lg font-bold text-text-primary mb-3">Din svaghetsanalys 💪</h3>
+            <div className="flex flex-wrap gap-2">
+              {progress.weaknesses.map((weakness, idx) => (
+                <motion.span
+                  key={idx}
+                  className="px-3 py-1 rounded-full text-sm font-semibold bg-danger/20 border border-danger/30 text-danger"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.4 + idx * 0.1 }}
+                >
+                  {weakness}
+                </motion.span>
+              ))}
+            </div>
+            <p className="text-text-tertiary text-sm mt-2">
+              Du blir starkare på dessa områden! 🚀
+            </p>
+          </motion.div>
+        )}
 
         {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
           {/* Score Trend */}
-          <motion.div
-            className="glass-lg p-8 rounded-2xl"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-          >
-            <h2 className="text-2xl font-bold text-text-primary mb-6">Dina framsteg</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={DEMO_SCORES}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
-                <XAxis dataKey="name" stroke="rgba(148, 163, 184, 0.5)" style={{ fontSize: '12px' }} />
-                <YAxis stroke="rgba(148, 163, 184, 0.5)" style={{ fontSize: '12px' }} domain={[0, 100]} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'rgba(30, 41, 59, 0.9)',
-                    border: '1px solid #00BFFF',
-                    borderRadius: '8px',
-                  }}
-                  labelStyle={{ color: '#f1f5f9' }}
-                />
-                <Line type="monotone" dataKey="score" stroke="#00BFFF" strokeWidth={3} dot={{ fill: '#00BFFF', r: 5 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </motion.div>
+          {scoreHistory.length > 0 && (
+            <motion.div
+              className="glass-lg p-8 rounded-2xl"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <h2 className="text-2xl font-bold text-text-primary mb-6">Dina framsteg</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={scoreHistory}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
+                  <XAxis dataKey="name" stroke="rgba(148, 163, 184, 0.5)" style={{ fontSize: '12px' }} />
+                  <YAxis stroke="rgba(148, 163, 184, 0.5)" style={{ fontSize: '12px' }} domain={[0, 100]} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'rgba(10, 10, 10, 0.9)',
+                      border: '1px solid #00f0ff',
+                      borderRadius: '8px',
+                    }}
+                    labelStyle={{ color: '#f1f5f9' }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="score"
+                    stroke="#00f0ff"
+                    strokeWidth={3}
+                    dot={{ fill: '#00f0ff', r: 5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </motion.div>
+          )}
 
-          {/* Category Performance */}
-          <motion.div
-            className="glass-lg p-8 rounded-2xl"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <h2 className="text-2xl font-bold text-text-primary mb-6">Ämnen</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={[
-                { name: 'Matematik', score: 88 },
-                { name: 'Engelska', score: 82 },
-                { name: 'Svenska', score: 85 },
-              ]}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
-                <XAxis dataKey="name" stroke="rgba(148, 163, 184, 0.5)" style={{ fontSize: '12px' }} />
-                <YAxis stroke="rgba(148, 163, 184, 0.5)" style={{ fontSize: '12px' }} domain={[0, 100]} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'rgba(30, 41, 59, 0.9)',
-                    border: '1px solid #00BFFF',
-                    borderRadius: '8px',
-                  }}
-                  labelStyle={{ color: '#f1f5f9' }}
-                />
-                <Bar dataKey="score" fill="url(#colorGradient)" radius={[8, 8, 0, 0]} />
-                <defs>
-                  <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#00BFFF" />
-                    <stop offset="100%" stopColor="#7c3aed" />
-                  </linearGradient>
-                </defs>
-              </BarChart>
-            </ResponsiveContainer>
-          </motion.div>
+          {/* Empty State */}
+          {scoreHistory.length === 0 && (
+            <motion.div
+              className="glass-lg p-8 rounded-2xl text-center"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <p className="text-text-tertiary mb-4">Inget quiz ännu! 📊</p>
+              <Link href="/kurser" className="text-neon font-semibold hover:text-accent transition-colors">
+                Börja träna →
+              </Link>
+            </motion.div>
+          )}
         </div>
 
         {/* Recent Quizzes */}
-        <motion.div
-          className="glass-lg p-8 rounded-2xl mb-12"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-text-primary">Senaste quiz</h2>
-            <Link href="/kurser" className="text-neon hover:text-neon-light transition-colors text-sm font-semibold">
-              Se fler →
-            </Link>
-          </div>
+        {recentQuizzes.length > 0 && (
+          <motion.div
+            className="glass-lg p-8 rounded-2xl mb-12"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-text-primary">Senaste quiz</h2>
+              <Link href="/kurser" className="text-neon hover:text-accent transition-colors text-sm font-semibold">
+                Se fler →
+              </Link>
+            </div>
 
-          <div className="space-y-3">
-            {DEMO_RECENT_QUIZZES.map((quiz, idx) => (
-              <motion.div
-                key={quiz.id}
-                className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors group cursor-pointer"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.6 + idx * 0.1 }}
-              >
-                <div>
-                  <p className="font-semibold text-text-primary">{quiz.course}</p>
-                  <p className="text-xs text-text-tertiary">{quiz.date}</p>
-                </div>
-                <div className="flex items-center space-x-4">
-                  <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-neon/20 to-accent/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <span className="text-2xl font-black text-neon">{quiz.percentage}%</span>
+            <div className="space-y-3">
+              {recentQuizzes.map((quiz, idx) => (
+                <motion.div
+                  key={quiz.id}
+                  className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.6 + idx * 0.1 }}
+                >
+                  <div>
+                    <p className="font-semibold text-text-primary">{quiz.course_name}</p>
+                    <p className="text-xs text-text-tertiary">
+                      {new Date(quiz.created_at).toLocaleDateString('sv-SE')}
+                    </p>
                   </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
+                  <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-neon/20 to-accent/20 flex items-center justify-center">
+                    <span className="text-2xl font-black text-neon">{quiz.score || 0}%</span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* Quick Actions */}
         <motion.div
@@ -219,11 +377,28 @@ export default function DashboardPage() {
             <p className="text-text-tertiary">Gör ett nytt quiz på en annan kurs</p>
           </Link>
 
-          <div className="glass-lg p-8 rounded-xl text-center">
-            <div className="text-4xl mb-3">🎯</div>
-            <h3 className="text-xl font-bold text-text-primary mb-1">Håll streaken</h3>
-            <p className="text-text-tertiary">Du är på 7 dagars streak! 🔥</p>
-          </div>
+          {progress?.streak === 0 ? (
+            <Link
+              href="/kurser"
+              className="glass-lg p-8 rounded-xl hover:glass-hover transition-all transform hover:scale-105 cursor-pointer text-center"
+            >
+              <div className="text-4xl mb-3">🔥</div>
+              <h3 className="text-xl font-bold text-text-primary mb-1">Starta din streak</h3>
+              <p className="text-text-tertiary">Gör ett quiz idag för att börja!</p>
+            </Link>
+          ) : (
+            <div className="glass-lg p-8 rounded-xl text-center">
+              <motion.div
+                className="text-4xl mb-3"
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 1, repeat: Infinity }}
+              >
+                🔥
+              </motion.div>
+              <h3 className="text-xl font-bold text-text-primary mb-1">Du håller streaken!</h3>
+              <p className="text-text-tertiary">Fortsätt så där! {progress.streak} dagar i rad</p>
+            </div>
+          )}
         </motion.div>
       </div>
     </div>

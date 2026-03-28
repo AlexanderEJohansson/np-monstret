@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Check, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, X, Clock } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase'
 
 interface Question {
   id: number
@@ -22,12 +23,14 @@ interface QuizState {
   isLoading: boolean
   isFinished: boolean
   score: number
+  startTime: number
 }
 
 export default function QuizPage() {
   const params = useParams()
   const courseId = params.courseId
   const router = useRouter()
+  const supabase = createClient()
 
   const [state, setState] = useState<QuizState>({
     questions: [],
@@ -36,11 +39,23 @@ export default function QuizPage() {
     isLoading: true,
     isFinished: false,
     score: 0,
+    startTime: Date.now(),
   })
+
+  const [elapsedTime, setElapsedTime] = useState(0)
 
   useEffect(() => {
     loadQuiz()
   }, [courseId])
+
+  // Timer
+  useEffect(() => {
+    if (state.isFinished || state.isLoading) return
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - state.startTime) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [state.startTime, state.isFinished, state.isLoading])
 
   const loadQuiz = async () => {
     try {
@@ -56,6 +71,7 @@ export default function QuizPage() {
         questions: data.questions,
         selectedAnswers: Array(data.questions.length).fill(null),
         isLoading: false,
+        startTime: Date.now(),
       }))
     } catch (error) {
       console.error('Error loading quiz:', error)
@@ -83,20 +99,97 @@ export default function QuizPage() {
     }
   }
 
-  const finishQuiz = () => {
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (state.isFinished || state.isLoading) return
+
+      if (['1', '2', '3', '4'].includes(e.key)) {
+        const idx = parseInt(e.key) - 1
+        if (idx < state.questions[state.currentQuestion]?.options.length) {
+          handleSelectAnswer(idx)
+        }
+      } else if (e.key === 'Enter') {
+        handleNext()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [state])
+
+  const finishQuiz = async () => {
     let score = 0
+    const missedCategories: { [key: string]: number } = {}
+
     state.selectedAnswers.forEach((answer, idx) => {
-      if (answer === state.questions[idx].correct) {
+      const q = state.questions[idx]
+      if (answer === q.correct) {
         score++
+      } else {
+        missedCategories[q.category] = (missedCategories[q.category] || 0) + 1
       }
     })
 
-    if (score / state.questions.length > 0.7) {
+    const scorePercentage = Math.round((score / state.questions.length) * 100)
+
+    // Trigger confetti
+    if (scorePercentage > 90) {
+      confetti({
+        particleCount: 200,
+        spread: 100,
+        origin: { y: 0.6 },
+      })
+    } else if (scorePercentage > 70) {
       confetti({
         particleCount: 100,
         spread: 70,
         origin: { y: 0.6 },
       })
+    }
+
+    // Spara till Supabase
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // Spara quiz-resultat
+        await supabase.from('quizzes').insert({
+          user_id: user.id,
+          course_id: courseId,
+          course_name: 'Quiz',
+          score: scorePercentage,
+          completed_at: new Date().toISOString(),
+        })
+
+        // Uppdatera user_progress
+        const { data: progress } = await supabase
+          .from('user_progress')
+          .select('*')
+          .eq('user_id', user.id)
+          .single()
+
+        if (progress) {
+          const newXp = progress.total_xp + scorePercentage
+          const weaknesses = Object.keys(missedCategories).sort(
+            (a, b) => missedCategories[b] - missedCategories[a]
+          )
+
+          await supabase
+            .from('user_progress')
+            .update({
+              total_quizzes: progress.total_quizzes + 1,
+              avg_score:
+                (progress.avg_score * progress.total_quizzes + scorePercentage) /
+                (progress.total_quizzes + 1),
+              total_xp: newXp,
+              weaknesses: weaknesses.slice(0, 3),
+              last_quiz_date: new Date().toISOString(),
+            })
+            .eq('user_id', user.id)
+        }
+      }
+    } catch (error) {
+      console.error('Error saving quiz:', error)
     }
 
     setState((prev) => ({
@@ -121,15 +214,22 @@ export default function QuizPage() {
   if (state.isFinished) {
     const scorePercentage = Math.round((state.score / state.questions.length) * 100)
     const isPerfect = scorePercentage === 100
+    const isOutstanding = scorePercentage >= 90
     const isGood = scorePercentage >= 70
-    const feedback = isPerfect
-      ? 'PERFEKT! Du är en riktig NP-Monster! 🤖'
+    const isOkay = scorePercentage >= 50
+
+    let feedback = isPerfect
+      ? '🏆 PERFEKT! Du är en riktig NP-Monster! 🤖'
+      : isOutstanding
+      ? '🏆 OUTSTANDING! Du är bäst! 💫'
       : isGood
-      ? 'Bra jobbat! Du är på rätt väg 🚀'
-      : 'Övning ger färdighet – försök igen!'
+      ? '🎉 Bra jobbat! Du är på rätt väg 🚀'
+      : isOkay
+      ? '👍 Du är på väg! Fortsätt träna 💪'
+      : '💪 Övning ger färdighet – försök igen!'
 
     return (
-      <div className="min-h-screen py-12 px-4">
+      <div className="min-h-screen py-12 px-4 bg-gradient-to-b from-primary to-secondary/10">
         <div className="max-w-2xl mx-auto">
           <motion.div
             className="text-center space-y-8"
@@ -137,17 +237,70 @@ export default function QuizPage() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6 }}
           >
-            {/* Score Circle */}
-            <motion.div
-              className="w-48 h-48 mx-auto rounded-full bg-gradient-to-br from-neon/20 to-accent/20 border-2 border-neon flex items-center justify-center relative"
-              animate={{ scale: [0.9, 1.1, 1] }}
-              transition={{ duration: 0.8 }}
+            {/* Animated Score Circle */}
+            <motion.svg
+              className="w-48 h-48 mx-auto"
+              viewBox="0 0 200 200"
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8, type: 'spring' }}
             >
-              <div className="text-center">
-                <div className="text-6xl font-black text-neon">{scorePercentage}%</div>
-                <div className="text-sm text-text-tertiary mt-1">{state.score} av {state.questions.length} rätt</div>
-              </div>
-            </motion.div>
+              {/* Background circle */}
+              <circle
+                cx="100"
+                cy="100"
+                r="90"
+                fill="none"
+                stroke="rgba(0, 240, 255, 0.2)"
+                strokeWidth="8"
+              />
+
+              {/* Progress circle */}
+              <motion.circle
+                cx="100"
+                cy="100"
+                r="90"
+                fill="none"
+                stroke="url(#scoreGradient)"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeDasharray="565.48"
+                strokeDashoffset="565.48"
+                animate={{
+                  strokeDashoffset: 565.48 * (1 - scorePercentage / 100),
+                }}
+                transition={{ duration: 1.5, ease: 'easeInOut' }}
+              />
+
+              {/* Gradient */}
+              <defs>
+                <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#00f0ff" />
+                  <stop offset="100%" stopColor="#ff00aa" />
+                </linearGradient>
+              </defs>
+
+              {/* Text */}
+              <text
+                x="100"
+                y="95"
+                textAnchor="middle"
+                fontSize="48"
+                fontWeight="900"
+                fill="#00f0ff"
+              >
+                {scorePercentage}%
+              </text>
+              <text
+                x="100"
+                y="125"
+                textAnchor="middle"
+                fontSize="12"
+                fill="rgba(148, 163, 184, 0.7)"
+              >
+                {state.score} av {state.questions.length} rätt
+              </text>
+            </motion.svg>
 
             {/* Feedback */}
             <motion.div
@@ -155,12 +308,37 @@ export default function QuizPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
             >
-              <h1 className="text-4xl font-black gradient-text-static mb-2">{feedback}</h1>
-              <p className="text-text-secondary">
+              <h1 className="text-4xl font-black bg-gradient-to-r from-neon to-accent bg-clip-text text-transparent mb-2">
+                {feedback}
+              </h1>
+              <p className="text-text-secondary text-lg">
                 {isGood
                   ? 'Du är väl förberedd för provet! Vill du träna på något annat?'
-                  : 'Det finns alltid plats för förbättring. Försök igen för att se om du kan göra det bättre!'}
+                  : isOkay
+                  ? 'Du är på rätt väg! Träna lite till så blir du ännu bättre.'
+                  : 'Ingen panik – det tog alla tid att lära sig. Försök igen!'}
               </p>
+            </motion.div>
+
+            {/* Stats */}
+            <motion.div
+              className="grid grid-cols-3 gap-4 mb-4"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <div className="glass-lg p-4 rounded-lg">
+                <p className="text-text-tertiary text-sm">Tid</p>
+                <p className="text-2xl font-bold text-neon">{Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')}</p>
+              </div>
+              <div className="glass-lg p-4 rounded-lg">
+                <p className="text-text-tertiary text-sm">Rätt</p>
+                <p className="text-2xl font-bold text-success">{state.score}</p>
+              </div>
+              <div className="glass-lg p-4 rounded-lg">
+                <p className="text-text-tertiary text-sm">XP+</p>
+                <p className="text-2xl font-bold text-accent">+{scorePercentage}</p>
+              </div>
             </motion.div>
 
             {/* Results */}
@@ -170,38 +348,49 @@ export default function QuizPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
             >
-              <h2 className="text-2xl font-bold text-text-primary text-left">Din test:</h2>
+              <h2 className="text-2xl font-bold text-text-primary text-left">Dina svar:</h2>
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {state.questions.map((q, idx) => {
                   const isCorrect = state.selectedAnswers[idx] === q.correct
                   return (
-                    <div
+                    <motion.div
                       key={idx}
                       className={`p-4 rounded-lg border-2 transition-all ${
                         isCorrect
                           ? 'bg-success/10 border-success/30'
                           : 'bg-danger/10 border-danger/30'
                       }`}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.5 + idx * 0.05 }}
                     >
                       <div className="flex items-start space-x-3">
                         <div
-                          className={`mt-1 flex-shrink-0 ${isCorrect ? 'text-success' : 'text-danger'}`}
+                          className={`mt-1 flex-shrink-0 ${
+                            isCorrect ? 'text-success' : 'text-danger'
+                          }`}
                         >
                           {isCorrect ? <Check size={20} /> : <X size={20} />}
                         </div>
                         <div className="flex-1 text-left">
-                          <p className="font-semibold text-text-primary text-sm mb-1">{q.question}</p>
+                          <p className="font-semibold text-text-primary text-sm mb-1">
+                            {q.question}
+                          </p>
                           <p className="text-xs text-text-tertiary">
-                            Din svar: <span className={isCorrect ? 'text-success' : 'text-danger'}>{q.options[state.selectedAnswers[idx]!]}</span>
+                            Din svar:{' '}
+                            <span className={isCorrect ? 'text-success' : 'text-danger'}>
+                              {q.options[state.selectedAnswers[idx]!]}
+                            </span>
                           </p>
                           {!isCorrect && (
                             <p className="text-xs text-text-tertiary">
-                              Rätt svar: <span className="text-success">{q.options[q.correct]}</span>
+                              Rätt svar:{' '}
+                              <span className="text-success">{q.options[q.correct]}</span>
                             </p>
                           )}
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   )
                 })}
               </div>
@@ -223,6 +412,7 @@ export default function QuizPage() {
                     isLoading: true,
                     isFinished: false,
                     score: 0,
+                    startTime: Date.now(),
                   })
                   loadQuiz()
                 }}
@@ -246,10 +436,16 @@ export default function QuizPage() {
   const currentQ = state.questions[state.currentQuestion]
   const progressPercentage = ((state.currentQuestion + 1) / state.questions.length) * 100
 
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
   return (
     <div className="min-h-screen py-12 px-4 bg-gradient-to-b from-primary to-secondary/10">
       <div className="max-w-2xl mx-auto">
-        {/* Progress Bar */}
+        {/* Header with Timer */}
         <motion.div
           className="mb-8"
           initial={{ opacity: 0, y: -20 }}
@@ -258,15 +454,23 @@ export default function QuizPage() {
         >
           <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-text-tertiary text-sm">Fråga {state.currentQuestion + 1} av {state.questions.length}</p>
+              <p className="text-text-tertiary text-sm">
+                Fråga {state.currentQuestion + 1} av {state.questions.length}
+              </p>
               <p className="text-neon font-semibold text-sm">{progressPercentage.toFixed(0)}% klar</p>
             </div>
-            <button
-              onClick={() => router.push('/kurser')}
-              className="px-3 py-1 text-xs text-text-tertiary hover:text-text-primary transition-colors"
-            >
-              ✕ Avsluta
-            </button>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-text-tertiary">
+                <Clock size={18} />
+                <span className="text-sm font-semibold">{formatTime(elapsedTime)}</span>
+              </div>
+              <button
+                onClick={() => router.push('/kurser')}
+                className="px-3 py-1 text-xs text-text-tertiary hover:text-text-primary transition-colors"
+              >
+                ✕ Avsluta
+              </button>
+            </div>
           </div>
           <div className="h-2 bg-secondary rounded-full overflow-hidden">
             <motion.div
@@ -289,9 +493,12 @@ export default function QuizPage() {
             transition={{ duration: 0.3 }}
           >
             <div className="mb-6">
-              <p className="text-xs text-neon font-semibold uppercase mb-2 tracking-wide">
-                {currentQ.category}
-              </p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-neon font-semibold uppercase mb-2 tracking-wide px-3 py-1 bg-neon/10 rounded-full w-fit">
+                  {currentQ.category}
+                </p>
+                <p className="text-xs text-text-tertiary">Fråga {state.currentQuestion + 1} av {state.questions.length}</p>
+              </div>
               <h2 className="text-2xl font-bold text-text-primary">{currentQ.question}</h2>
             </div>
 
@@ -311,8 +518,14 @@ export default function QuizPage() {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: idx * 0.1 }}
+                  title={`Tryck ${idx + 1} på tangentbordet`}
                 >
-                  <span>{option}</span>
+                  <div className="flex items-center space-x-3">
+                    <span className="text-sm font-bold text-text-tertiary group-hover:text-neon transition-colors">
+                      {idx + 1}
+                    </span>
+                    <span>{option}</span>
+                  </div>
                   {state.selectedAnswers[state.currentQuestion] === idx && (
                     <motion.div
                       className="w-6 h-6 rounded-full bg-gradient-to-r from-neon to-accent flex items-center justify-center"
@@ -326,6 +539,10 @@ export default function QuizPage() {
                 </motion.button>
               ))}
             </div>
+
+            <p className="text-xs text-text-tertiary text-center">
+              💡 Tips: Använd sifferknapparna (1-4) för att svara snabbare! Tryck Enter för nästa.
+            </p>
           </motion.div>
         </AnimatePresence>
 

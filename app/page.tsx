@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
@@ -67,7 +67,31 @@ const FAQS = [
 export default function Home() {
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null)
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly')
+  const [quizCount, setQuizCount] = useState(0)
   const router = useRouter()
+
+  // Counter animation
+  useEffect(() => {
+    let animationFrameId: NodeJS.Timeout
+    const startCount = 0
+    const endCount = 1247
+    const duration = 2000
+    const startTime = Date.now()
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      const current = Math.floor(progress * endCount)
+      setQuizCount(current)
+
+      if (progress < 1) {
+        animationFrameId = setTimeout(animate, 16)
+      }
+    }
+
+    animate()
+    return () => clearTimeout(animationFrameId)
+  }, [])
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -112,7 +136,7 @@ export default function Home() {
             className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-neon/20 to-accent/20 rounded-full border border-neon/30 animate-pulse"
           >
             <span className="text-xl">🔥</span>
-            <span className="text-neon font-semibold">Över 1000 elever pluggar redan</span>
+            <span className="text-neon font-semibold">Över <span className="font-black">{quizCount.toLocaleString('sv-SE')}</span> quiz genomförda</span>
           </motion.div>
 
           {/* Main Heading */}

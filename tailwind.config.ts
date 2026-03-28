@@ -8,16 +8,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: '#0f172a',
-        secondary: '#1e293b',
-        neon: '#00BFFF',
-        'neon-light': '#00E5FF',
+        primary: '#0a0a0a',
+        secondary: '#1a1a2e',
+        neon: '#00f0ff',
+        'neon-light': '#00f0ff',
         'neon-dark': '#0099CC',
-        accent: '#7c3aed',
-        'accent-light': '#a78bfa',
-        success: '#10b981',
-        warning: '#f59e0b',
+        accent: '#ff00aa',
+        'accent-light': '#ff66cc',
+        success: '#00ff88',
+        warning: '#ffaa00',
         danger: '#ef4444',
+        // Ämnesfärger
+        'subject-math': '#00f0ff',
+        'subject-english': '#ff00aa',
+        'subject-swedish': '#ffaa00',
       },
       fontFamily: {
         sans: ['var(--font-inter)', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
@@ -30,6 +34,8 @@ const config: Config = {
         'float': 'float 3s ease-in-out infinite',
         'shimmer': 'shimmer 2s infinite',
         'bounce-subtle': 'bounceSubtle 1s ease-in-out infinite',
+        'flame-pulse': 'flamePulse 1.5s ease-in-out infinite',
+        'xp-fill': 'xpFill 1s ease-out',
       },
       keyframes: {
         fadeIn: {
@@ -45,8 +51,8 @@ const config: Config = {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         pulseGlow: {
-          '0%, 100%': { boxShadow: '0 0 20px rgba(0, 191, 255, 0.5)' },
-          '50%': { boxShadow: '0 0 40px rgba(0, 191, 255, 0.8)' },
+          '0%, 100%': { boxShadow: '0 0 20px rgba(0, 240, 255, 0.5)' },
+          '50%': { boxShadow: '0 0 40px rgba(0, 240, 255, 0.8)' },
         },
         float: {
           '0%, 100%': { transform: 'translateY(0px)' },
@@ -60,14 +66,24 @@ const config: Config = {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-4px)' },
         },
+        flamePulse: {
+          '0%, 100%': { transform: 'scale(1)', opacity: '1' },
+          '50%': { transform: 'scale(1.1)', opacity: '0.8' },
+        },
+        xpFill: {
+          '0%': { width: '0%' },
+          '100%': { width: 'var(--xp-percentage)' },
+        },
       },
       backdropBlur: {
         xs: '2px',
       },
       boxShadow: {
-        'glow': '0 0 20px rgba(0, 191, 255, 0.3)',
-        'glow-lg': '0 0 40px rgba(0, 191, 255, 0.5)',
-        'glow-neon': '0 0 30px rgba(0, 191, 255, 0.6), 0 0 60px rgba(0, 191, 255, 0.3)',
+        'glow': '0 0 20px rgba(0, 240, 255, 0.3)',
+        'glow-lg': '0 0 40px rgba(0, 240, 255, 0.5)',
+        'glow-neon': '0 0 30px rgba(0, 240, 255, 0.6), 0 0 60px rgba(0, 240, 255, 0.3)',
+        'accent-glow': '0 0 30px rgba(255, 0, 170, 0.4)',
+        'success-glow': '0 0 20px rgba(0, 255, 136, 0.3)',
       },
     },
   },
