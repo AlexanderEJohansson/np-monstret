@@ -39,19 +39,50 @@ export default function Footer() {
             </nav>
           </div>
 
-          {/* Support */}
+          {/* Nationella prov (regler) */}
           <div className="space-y-4">
-            <h4 className="font-semibold text-text-primary">Support</h4>
+            <h4 className="font-semibold text-text-primary">Nationella prov</h4>
             <nav className="space-y-2">
-              <Link href="#" className="block text-text-tertiary hover:text-neon transition-colors text-sm">
-                Hjälpcenter
-              </Link>
-              <Link href="#" className="block text-text-tertiary hover:text-neon transition-colors text-sm">
-                Kontakt
-              </Link>
-              <Link href="#" className="block text-text-tertiary hover:text-neon transition-colors text-sm">
-                FAQ
-              </Link>
+              <a
+                href="https://npguide.se/skolpersonal/np-ansvarig"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-text-tertiary hover:text-neon transition-colors text-sm"
+              >
+                NP-ansvarig (regler &amp; datum)
+              </a>
+              <a
+                href="https://npguide.se/skolpersonal/hjalpmedel-tillatna-och-forbjudna"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-text-tertiary hover:text-neon transition-colors text-sm"
+              >
+                Hjälpmedel &amp; mobilförbud
+              </a>
+              <a
+                href="https://npguide.se/skolpersonal/lararinformation"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-text-tertiary hover:text-neon transition-colors text-sm"
+              >
+                Lärarinformation
+              </a>
+              <a
+                href="https://npguide.se/faq"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-text-tertiary hover:text-neon transition-colors text-sm"
+              >
+                FAQ (skolpersonal)
+              </a>
+              <a
+                href="https://npprov.se"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-text-tertiary hover:text-neon transition-colors text-sm"
+              >
+                Äldre provuppgifter (npprov.se)
+              </a>
             </nav>
           </div>
 
